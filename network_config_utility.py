@@ -5,7 +5,7 @@ import sys
 import tkinter as tk
 from tkinter import messagebox, ttk
 import winreg
-import wmi  # New dependency: pip install wmi
+import wmi
 
 # --- Configuration ---
 DNS_CONFIG_FILE = "dns_servers.json"
@@ -14,17 +14,16 @@ PROXY_CONFIG_FILE = "proxies.json"
 DEFAULT_DNS_SERVERS = {
     "Google": ["8.8.8.8", "8.8.4.4"],
     "Cloudflare": ["1.1.1.1", "1.0.0.1"],
-    "UltraDNS": ["64.6.64.6", "64.6.65.6"],
-    "Electro": ["78.157.42.100", "78.157.42.101"],
-    "Radar": ["10.202.10.10", "10.202.10.11"],
-    "OpenDNS": ["208.67.222.222", "208.67.220.220"],
-    "Shecan": ["178.22.122.100", "185.51.200.2"]
+    "Verisign": ["64.6.64.6", "64.6.65.6"],
+    "Neustar": ["78.157.42.100", "78.157.42.101"],
+    "Internal": ["10.202.10.10", "10.202.10.11"],
+    "OpenDNS": ["208.67.222.222", "208.67.220.220"]
 }
 
 DEFAULT_PROXIES = {
     "No Proxy": {"server": "", "port": "", "user": "", "pass": "", "type": "Disabled"},
-    "Proxy 1/wifi": {"server": "192.168.1.159", "port": "8080", "user": "", "pass": "", "type": "HTTP"},
-    "Proxy 2/hotspot": {"server": "192.168.178.134", "port": "8080", "user": "", "pass": "", "type": "HTTP"}
+    "Proxy 1": {"server": "192.168.1.159", "port": "8080", "user": "", "pass": "", "type": "HTTP"},
+    "Proxy 2": {"server": "192.168.178.134", "port": "8080", "user": "", "pass": "", "type": "HTTP"}
 }
 
 
@@ -110,14 +109,12 @@ def set_proxy(proxy_server, port, proxy_type, user="", password=""):
     """Sets the system-wide proxy via registry."""
     try:
         registry_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
-                                      r'Software\Microsoft\Windows\CurrentVersion\Internet Settings',
-                                      0, winreg.KEY_WRITE)
+                                          r'Software\Microsoft\Windows\CurrentVersion\Internet Settings',
+                                          0, winreg.KEY_WRITE)
         
         proxy_address = f"{proxy_server}:{port}"
         winreg.SetValueEx(registry_key, 'ProxyServer', 0, winreg.REG_SZ, proxy_address)
         winreg.SetValueEx(registry_key, 'ProxyEnable', 0, winreg.REG_DWORD, 1)
-
-        # Set proxy type (e.g., "http=", "socks=") - for simplicity, we'll assume HTTP
         winreg.SetValueEx(registry_key, 'ProxyOverride', 0, winreg.REG_SZ, '<local>')
         
         winreg.CloseKey(registry_key)
@@ -135,8 +132,8 @@ def disable_proxy():
     """Disables the system-wide proxy via registry."""
     try:
         registry_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
-                                      r'Software\Microsoft\Windows\CurrentVersion\Internet Settings',
-                                      0, winreg.KEY_WRITE)
+                                          r'Software\Microsoft\Windows\CurrentVersion\Internet Settings',
+                                          0, winreg.KEY_WRITE)
         winreg.SetValueEx(registry_key, 'ProxyEnable', 0, winreg.REG_DWORD, 0)
         winreg.CloseKey(registry_key)
         
@@ -245,7 +242,7 @@ class DnsChangerApp:
         """Updates the primary/secondary IP labels based on selection."""
         selected_name = self.dns_selection_var.get()
         ips = self.dns_servers.get(selected_name)
-        if ips:
+        if ips and len(ips) >= 2:
             self.primary_dns_label.config(text=f"Primary: {ips[0]}")
             self.secondary_dns_label.config(text=f"Secondary: {ips[1]}")
         else:
@@ -286,11 +283,13 @@ class DnsChangerApp:
         """Updates the proxy details label based on the selected proxy."""
         selected_name = self.proxy_var.get()
         proxy_info = self.proxies.get(selected_name)
-        if proxy_info and proxy_info['server']:
+        if proxy_info and proxy_info.get('server'):
             details = (f"Server: {proxy_info['server']}:{proxy_info['port']}\n"
-                       f"Type: {proxy_info['type']}\n"
-                       f"User: {proxy_info['user'] if proxy_info['user'] else 'None'}")
+                           f"Type: {proxy_info['type']}\n"
+                           f"User: {proxy_info.get('user') if proxy_info.get('user') else 'None'}")
             self.proxy_details_label.config(text=details)
+        elif selected_name == "No Proxy":
+            self.proxy_details_label.config(text="Details: Proxy is disabled.")
         else:
             self.proxy_details_label.config(text="Details: N/A")
 
@@ -303,8 +302,8 @@ class DnsChangerApp:
         
         proxy_info = self.proxies[selected_name]
 
-        if proxy_info['server']:
-            set_proxy(proxy_info['server'], proxy_info['port'], proxy_info['type'], proxy_info['user'], proxy_info['pass'])
+        if proxy_info.get('server'):
+            set_proxy(proxy_info['server'], proxy_info['port'], proxy_info['type'], proxy_info.get('user', ''), proxy_info.get('pass', ''))
         else:
             disable_proxy()
 
@@ -313,19 +312,35 @@ class DnsChangerApp:
         """Opens the Toplevel window to add/manage DNS servers."""
         manage_window = tk.Toplevel(self.root)
         manage_window.title("Manage DNS Servers")
-        manage_window.geometry("400x300")
+        manage_window.geometry("400x350")
         manage_window.transient(self.root)
+        manage_window.grab_set()
 
         frame = ttk.Frame(manage_window, padding="15")
         frame.pack(fill="both", expand=True)
-
+        
+        # --- Listbox for existing DNS ---
         list_frame = ttk.Frame(frame)
         list_frame.pack(fill="both", expand=True, pady=(0, 10))
         ttk.Label(list_frame, text="Existing DNS Servers:", font=("Segoe UI", 10, "bold")).pack(anchor='w')
-        listbox = tk.Listbox(list_frame)
+        listbox = tk.Listbox(list_frame, height=5)
         for name in self.dns_servers:
             listbox.insert(tk.END, name)
         listbox.pack(fill="both", expand=True)
+
+        # --- Form to add new DNS ---
+        form_frame = ttk.LabelFrame(frame, text="Add/Edit DNS", padding="10")
+        form_frame.pack(fill="x")
+        ttk.Label(form_frame, text="Name:").grid(row=0, column=0, sticky='w', pady=2)
+        name_entry = ttk.Entry(form_frame)
+        name_entry.grid(row=0, column=1, sticky='ew', padx=5)
+        ttk.Label(form_frame, text="Primary IP:").grid(row=1, column=0, sticky='w', pady=2)
+        primary_entry = ttk.Entry(form_frame)
+        primary_entry.grid(row=1, column=1, sticky='ew', padx=5)
+        ttk.Label(form_frame, text="Secondary IP:").grid(row=2, column=0, sticky='w', pady=2)
+        secondary_entry = ttk.Entry(form_frame)
+        secondary_entry.grid(row=2, column=1, sticky='ew', padx=5)
+        form_frame.columnconfigure(1, weight=1)
 
         def add_new():
             name = name_entry.get().strip()
@@ -335,47 +350,49 @@ class DnsChangerApp:
                 messagebox.showwarning("Input Error", "All fields are required.", parent=manage_window)
                 return
             self.dns_servers[name] = [primary, secondary]
-            save_json_file(DNS_CONFIG_FILE, self.dns_servers)
-            self.refresh_dns_dropdown()
-            manage_window.destroy()
+            if save_json_file(DNS_CONFIG_FILE, self.dns_servers):
+                messagebox.showinfo("Success", f"DNS '{name}' saved.", parent=manage_window)
+                self.refresh_dns_dropdown()
+                manage_window.destroy()
+            else:
+                messagebox.showerror("Save Error", "Could not save the DNS file.", parent=manage_window)
 
         def delete_selected():
-            selected = listbox.curselection()
-            if not selected:
+            try:
+                selected_index = listbox.curselection()[0]
+                name_to_delete = listbox.get(selected_index)
+            except IndexError:
                 messagebox.showwarning("Selection Error", "Please select a DNS server to delete.", parent=manage_window)
                 return
-            name_to_delete = listbox.get(selected[0])
-            if name_to_delete in ["Google", "Cloudflare", "Verisign", "Neustar", "Internal", "OpenDNS"]:
+
+            if name_to_delete in DEFAULT_DNS_SERVERS:
                 messagebox.showwarning("Error", "You cannot delete default DNS servers.", parent=manage_window)
                 return
-            del self.dns_servers[name_to_delete]
-            save_json_file(DNS_CONFIG_FILE, self.dns_servers)
-            self.refresh_dns_dropdown()
-            manage_window.destroy()
+            
+            if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete '{name_to_delete}'?", parent=manage_window):
+                del self.dns_servers[name_to_delete]
+                if save_json_file(DNS_CONFIG_FILE, self.dns_servers):
+                    self.refresh_dns_dropdown()
+                    manage_window.destroy()
+                else:
+                    messagebox.showerror("Save Error", "Could not save the DNS file.", parent=manage_window)
 
-        form_frame = ttk.LabelFrame(frame, text="Add New DNS", padding="10")
-        form_frame.pack(fill="x", pady=(10, 0))
-        ttk.Label(form_frame, text="Name:").pack(anchor='w')
-        name_entry = ttk.Entry(form_frame)
-        name_entry.pack(fill='x')
-        ttk.Label(form_frame, text="Primary IP:").pack(anchor='w')
-        primary_entry = ttk.Entry(form_frame)
-        primary_entry.pack(fill='x')
-        ttk.Label(form_frame, text="Secondary IP:").pack(anchor='w')
-        secondary_entry = ttk.Entry(form_frame)
-        secondary_entry.pack(fill='x')
-
+        # --- Button Bar ---
         button_frame = ttk.Frame(frame)
-        button_frame.pack(fill='x', pady=(10, 0))
-        ttk.Button(button_frame, text="Add New", command=add_new).pack(side="left", expand=True, fill="x", padx=(0, 5))
-        ttk.Button(button_frame, text="Delete Selected", command=delete_selected).pack(side="left", expand=True, fill="x", padx=(5, 0))
+        button_frame.pack(fill='x', pady=(15, 0))
+        
+        ttk.Button(button_frame, text="Add/Update", command=add_new).pack(side="left", expand=True, fill="x", padx=(0, 5))
+        ttk.Button(button_frame, text="Delete Selected", command=delete_selected).pack(side="left", expand=True, fill="x", padx=5)
+        # *** MISSING BUTTON ADDED HERE ***
+        ttk.Button(button_frame, text="Close", command=manage_window.destroy).pack(side="left", expand=True, fill="x", padx=(5, 0))
 
     def open_manage_proxy_window(self):
         """Opens the Toplevel window to add/manage proxies."""
         manage_window = tk.Toplevel(self.root)
         manage_window.title("Manage Proxies")
-        manage_window.geometry("450x450")
+        manage_window.geometry("450x500")
         manage_window.transient(self.root)
+        manage_window.grab_set()
 
         frame = ttk.Frame(manage_window, padding="15")
         frame.pack(fill="both", expand=True)
@@ -383,62 +400,69 @@ class DnsChangerApp:
         list_frame = ttk.Frame(frame)
         list_frame.pack(fill="both", expand=True, pady=(0, 10))
         ttk.Label(list_frame, text="Existing Proxies:", font=("Segoe UI", 10, "bold")).pack(anchor='w')
-        listbox = tk.Listbox(list_frame)
+        listbox = tk.Listbox(list_frame, height=6)
         for name in self.proxies:
             listbox.insert(tk.END, name)
         listbox.pack(fill="both", expand=True)
 
+        form_frame = ttk.LabelFrame(frame, text="Add/Edit Proxy", padding="10")
+        form_frame.pack(fill="x", pady=(10, 0))
+        
+        fields = ["Name:", "Server Address:", "Port:", "Username (Optional):", "Password (Optional):"]
+        self.proxy_entries = {}
+        for i, field in enumerate(fields):
+            ttk.Label(form_frame, text=field).grid(row=i, column=0, sticky='w', pady=2)
+            show_char = "*" if "Password" in field else ""
+            entry = ttk.Entry(form_frame, show=show_char)
+            entry.grid(row=i, column=1, sticky='ew', padx=5, pady=2)
+            self.proxy_entries[field.split(' ')[0].lower()] = entry
+        form_frame.columnconfigure(1, weight=1)
+
         def add_new():
-            name = name_entry.get().strip()
-            server = server_entry.get().strip()
-            port = port_entry.get().strip()
-            user = user_entry.get().strip()
-            password = password_entry.get().strip()
+            name = self.proxy_entries['name:'].get().strip()
+            server = self.proxy_entries['server'].get().strip()
+            port = self.proxy_entries['port:'].get().strip()
+            user = self.proxy_entries['username'].get().strip()
+            password = self.proxy_entries['password'].get().strip()
+            
             if not all([name, server, port]):
                 messagebox.showwarning("Input Error", "Name, Server, and Port are required.", parent=manage_window)
                 return
             self.proxies[name] = {"server": server, "port": port, "user": user, "pass": password, "type": "HTTP"}
-            save_json_file(PROXY_CONFIG_FILE, self.proxies)
-            self.refresh_proxy_dropdown()
-            manage_window.destroy()
+            if save_json_file(PROXY_CONFIG_FILE, self.proxies):
+                self.refresh_proxy_dropdown()
+                manage_window.destroy()
+            else:
+                messagebox.showerror("Save Error", "Could not save the proxy file.", parent=manage_window)
 
         def delete_selected():
-            selected = listbox.curselection()
-            if not selected:
+            try:
+                selected_index = listbox.curselection()[0]
+                name_to_delete = listbox.get(selected_index)
+            except IndexError:
                 messagebox.showwarning("Selection Error", "Please select a proxy to delete.", parent=manage_window)
                 return
-            name_to_delete = listbox.get(selected[0])
-            if name_to_delete in ["No Proxy", "Proxy 1", "Proxy 2"]:
+
+            if name_to_delete in DEFAULT_PROXIES:
                 messagebox.showwarning("Error", "You cannot delete default proxy settings.", parent=manage_window)
                 return
-            del self.proxies[name_to_delete]
-            save_json_file(PROXY_CONFIG_FILE, self.proxies)
-            self.refresh_proxy_dropdown()
-            manage_window.destroy()
+            
+            if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete '{name_to_delete}'?", parent=manage_window):
+                del self.proxies[name_to_delete]
+                if save_json_file(PROXY_CONFIG_FILE, self.proxies):
+                    self.refresh_proxy_dropdown()
+                    manage_window.destroy()
+                else:
+                     messagebox.showerror("Save Error", "Could not save the proxy file.", parent=manage_window)
 
-        form_frame = ttk.LabelFrame(frame, text="Add New Proxy", padding="10")
-        form_frame.pack(fill="x", pady=(10, 0))
-        ttk.Label(form_frame, text="Name:").pack(anchor='w')
-        name_entry = ttk.Entry(form_frame)
-        name_entry.pack(fill='x')
-        ttk.Label(form_frame, text="Server Address:").pack(anchor='w')
-        server_entry = ttk.Entry(form_frame)
-        server_entry.pack(fill='x')
-        ttk.Label(form_frame, text="Port:").pack(anchor='w')
-        port_entry = ttk.Entry(form_frame)
-        port_entry.pack(fill='x')
-        ttk.Label(form_frame, text="Username (Optional):").pack(anchor='w')
-        user_entry = ttk.Entry(form_frame)
-        user_entry.pack(fill='x')
-        ttk.Label(form_frame, text="Password (Optional):").pack(anchor='w')
-        password_entry = ttk.Entry(form_frame, show="*")
-        password_entry.pack(fill='x')
-
+        # --- Button Bar ---
         button_frame = ttk.Frame(frame)
-        button_frame.pack(fill='x', pady=(10, 0))
-        ttk.Button(button_frame, text="Add New", command=add_new).pack(side="left", expand=True, fill="x", padx=(0, 5))
-        ttk.Button(button_frame, text="Delete Selected", command=delete_selected).pack(side="left", expand=True, fill="x", padx=(5, 0))
-
+        button_frame.pack(fill='x', pady=(15, 0))
+        
+        ttk.Button(button_frame, text="Add/Update", command=add_new).pack(side="left", expand=True, fill="x", padx=(0, 5))
+        ttk.Button(button_frame, text="Delete Selected", command=delete_selected).pack(side="left", expand=True, fill="x", padx=5)
+        # *** MISSING BUTTON ADDED HERE ***
+        ttk.Button(button_frame, text="Close", command=manage_window.destroy).pack(side="left", expand=True, fill="x", padx=(5, 0))
 
 def main():
     """Main function to check admin rights and run the GUI."""

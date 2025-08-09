@@ -1,4 +1,3 @@
-# Network-Config-Utility
 # DNS & Proxy Changer
 
 A powerful and user-friendly desktop utility for Windows that allows you to quickly change your network's DNS and proxy settings. Built with Python and Tkinter, this tool provides a seamless graphical interface, eliminating the need for complex command-line commands.
@@ -16,6 +15,30 @@ A powerful and user-friendly desktop utility for Windows that allows you to quic
     * Add custom proxies with support for authentication (username and password).
 * **Intuitive GUI:** A clean and responsive graphical interface built with Tkinter makes it simple to manage your network configurations.
 * **Administrator-Level Access:** The script automatically requests administrator privileges to ensure it can successfully modify system-level network settings.
+
+---
+
+## 📸 Screenshots
+
+### Main Interface
+
+![Main Interface](https://github.com/rezaxr14/Network-Config-Utility/blob/main/Screenshot_main.png)
+
+The main window provides a clear and concise way to select your network interface, choose a DNS server configuration, and apply your desired proxy settings.
+
+### Manage DNS Servers
+
+![Manage DNS Servers](https://github.com/rezaxr14/Network-Config-Utility/blob/main/Screenshot_addDNS.png)
+
+This dedicated window allows you to view existing DNS configurations and easily add new custom DNS servers.
+
+### Manage Proxies
+
+![Manage Proxies](https://github.com/rezaxr14/Network-Config-Utility/blob/main/Screenshot_addProxy.png)
+
+This window lets you manage your stored proxy configurations, including adding new ones with optional authentication details.
+
+---
 
 ## 🚀 Getting Started
 
